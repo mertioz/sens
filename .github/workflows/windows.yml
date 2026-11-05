@@ -1,0 +1,99 @@
+name: Windows
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Test des fournisseurs et des chemins Codex
+        run: dotnet run --project tests/ApiSmoke -c Release
+
+      - name: Détection réelle de Codex sans compte
+        shell: pwsh
+        run: |
+          $prefix = Join-Path $env:RUNNER_TEMP 'Codex CLI test'
+          npm install --global --prefix $prefix @openai/codex@0.156.1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:Path = "$prefix;$env:Path"
+          $env:SENS_TEST_CODEX_PREFIX = $prefix
+          dotnet run --project tests/ApiSmoke -c Release --no-build -- --codex-unconfigured
+
+      - name: Compiler et démarrer les éditions Windows x64
+        shell: pwsh
+        run: |
+          Add-Type @'
+          using System;
+          using System.Runtime.InteropServices;
+          public static class SensWindowsCheck {
+              [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+              public static extern IntPtr FindWindow(string windowClass, string title);
+              [DllImport("user32.dll")]
+              public static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
+              [DllImport("user32.dll")]
+              public static extern bool IsWindowVisible(IntPtr window);
+          }
+          '@
+          foreach ($edition in @('legere', 'autonome')) {
+              $folder = Join-Path $env:RUNNER_TEMP "Sens Windows $edition"
+              $selfContained = if ($edition -eq 'autonome') { 'true' } else { 'false' }
+              $binaryFolder = Join-Path $folder 'dist/Sens'
+              dotnet publish src/Sens -c Release -r win-x64 --self-contained $selfContained `
+                  -p:PublishSingleFile=true "-p:IncludeNativeLibrariesForSelfExtract=$selfContained" `
+                  "-p:EnableCompressionInSingleFile=$selfContained" -p:DebugType=None -o $binaryFolder
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              Copy-Item -LiteralPath 'Install-Sens.ps1', 'README.md', 'LICENSE' -Destination $folder
+              & (Join-Path $folder 'Install-Sens.ps1') -NoLaunch
+
+              $exe = Join-Path $env:LOCALAPPDATA 'Programs/Sens/Sens.exe'
+              $startup = [Environment]::GetFolderPath([Environment+SpecialFolder]::Startup)
+              $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $startup 'Sens.lnk'))
+              if ($shortcut.TargetPath -ne $exe -or $shortcut.Arguments -ne '--background') {
+                  throw "Le raccourci de démarrage est invalide pour l’édition $edition."
+              }
+              $process = Start-Process -FilePath $exe -ArgumentList '--background' -WindowStyle Hidden -PassThru
+              try {
+                  $ready = $false
+                  for ($attempt = 0; $attempt -lt 50 -and -not $process.HasExited; $attempt++) {
+                      $window = [SensWindowsCheck]::FindWindow('Sens.BackgroundWindow', 'Sens background')
+                      $owner = [uint32]0
+                      $null = [SensWindowsCheck]::GetWindowThreadProcessId($window, [ref]$owner)
+                      if ($owner -eq $process.Id -and -not [SensWindowsCheck]::IsWindowVisible($window)) {
+                          $ready = $true
+                          break
+                      }
+                      Start-Sleep -Milliseconds 200
+                  }
+                  if (-not $ready) { throw "L’édition $edition n’a pas initialisé sa fenêtre en arrière-plan." }
+                  "OK : édition $edition installée et démarrée sur le runner Windows."
+              } finally {
+                  if (-not $process.HasExited) { Stop-Process -InputObject $process; $null = $process.WaitForExit(5000) }
+              }
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Sens-Windows-x64-autonome
+          path: ${{ runner.temp }}/Sens Windows autonome/
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Sens-Windows-x64-legere
+          path: ${{ runner.temp }}/Sens Windows legere/
+          if-no-files-found: error
