@@ -4,18 +4,19 @@ Sens est un traducteur pour Windows x64. Il utilise les versions de Windows pris
 
 ## Installer
 
-Ouvre le dernier résultat réussi dans [Actions → Windows](https://github.com/mertioz/sens/actions/workflows/windows.yml) et télécharge une archive dans **Artifacts**.
+1. Connecte-toi à GitHub, ouvre les [builds Windows](https://github.com/mertioz/sens/actions/workflows/windows.yml) et clique sur le plus récent avec une coche verte. Dans **Artifacts**, télécharge **Sens-Windows-x64-autonome**.
+2. Fais un clic droit sur le ZIP téléchargé et choisis **Extraire tout**.
+3. Dans le dossier extrait, ouvre `dist` → `Sens` et double-clique sur **Sens.exe**. Dans la roue dentée, choisis ta langue et ton fournisseur IA.
 
-- **Sens-Windows-x64-autonome** contient le runtime .NET. Choisis cette édition si tu installes Sens sur un autre PC.
-- **Sens-Windows-x64-legere** utilise le [runtime Windows Desktop .NET 10 x64](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) déjà installé sur le PC.
+L’édition autonome inclut .NET. Si ton PC possède déjà le [runtime Windows Desktop .NET 10 x64](https://dotnet.microsoft.com/en-us/download/dotnet/10.0), tu peux télécharger **Sens-Windows-x64-legere** et suivre les mêmes étapes.
 
-Décompresse l’archive, puis lance cette commande dans PowerShell depuis son dossier.
+### Ajouter les raccourcis et le démarrage automatique
+
+Dans le dossier extrait, clique sur la barre d’adresse de l’Explorateur, tape `powershell` et appuie sur **Entrée**. Colle ensuite cette commande.
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-Sens.ps1
 ```
-
-Tu peux aussi lancer directement `dist\Sens\Sens.exe` pour essayer Sens. L’installation ajoute les raccourcis et le démarrage automatique.
 
 ## Utiliser
 
